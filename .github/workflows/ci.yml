@@ -1,0 +1,47 @@
+name: MO644/MC970 Assignment
+
+on: [push, workflow_dispatch]
+
+jobs:
+
+  # This job builds and run the tests
+  test:
+    name: Execute all tests
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+
+      - uses: actions/checkout@v2
+
+      # Build binaries
+      - name: Build binaries
+        uses: mo644-mc970/actions/build-action@master
+
+      # Run the tests
+      - name: Run Test 1
+        uses: mo644-mc970/actions/test-action@master
+        with:
+          testname: '1'
+      - name: Run Test 2
+        uses: mo644-mc970/actions/test-action@master
+        with:
+          testname: '2'
+      - name: Run Test 3
+        uses: mo644-mc970/actions/test-action@master
+        with:
+          testname: '3'
+      - name: Run Test 4
+        uses: mo644-mc970/actions/test-action@master
+        with:
+          testname: '4'
+      - name: Run Test 5
+        uses: mo644-mc970/actions/test-action@master
+        with:
+          testname: '5'
+
+      # Upload artifacts
+      - name: Upload CSV table
+        uses: actions/upload-artifact@v2
+        with:
+          name: Runtime
+          path: runtime.csv

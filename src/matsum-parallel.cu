@@ -4,14 +4,25 @@
 #include <omp.h>
 
 #define T 32
+#define T_exp 5 // T = 1 << T_exp
 
 __global__ void matrix_sum(int *A, int *B, int *C, int N, int M) {
-  int col = T * blockIdx.x + threadIdx.x;
-  int row = T * blockIdx.y + threadIdx.y;
+  int row = (blockIdx.y << T_exp) + threadIdx.y;
+  int col = (blockIdx.x << T_exp) + threadIdx.x;
 
-  if (row < N && col < M) {
-    C[row * M + col] = A[row * M + col] + B[row * M + col];
-  }
+  asm(
+  "{"
+    ".reg .pred %p;"
+    "setp.ge.s32 %p, %0, %2;" // set %p with row >= N 
+    "@%p mov.s32 %0, 0;" // conceptually: row = (row >= N) ? 0 : row
+    "setp.ge.s32 %p, %1, %3;" // set %p with col >= M
+    "@%p mov.s32 %1, 0;" // conceptually: col = (col >= M) ? 0 : col
+  "}"
+  : "+r"(row), "+r"(col)
+  : "r"(N), "r"(M));
+
+  int i = row * M + col;
+  C[i] = A[i] + B[i];
 }
 
 int main(int argc, char **argv) {

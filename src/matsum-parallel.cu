@@ -6,6 +6,15 @@
 #define T 32
 #define T_exp 5 // T = 1 << T_exp
 
+#define CUDACHECK(cmd) { \
+  cudaError_t e = cmd; \
+  if (e != cudaSuccess) { \
+    printf("Failed: Cuda error %s:%d '%s'\n", \
+      __FILE__, __LINE__, cudaGetErrorString(e)); \
+    exit(EXIT_FAILURE); \
+  } \
+}
+
 __global__ void matrix_sum(int *A, int *B, int *C, int N, int M) {
   int row = (blockIdx.y << T_exp) + threadIdx.y;
   int col = (blockIdx.x << T_exp) + threadIdx.x;
@@ -62,11 +71,11 @@ int main(int argc, char **argv) {
   }
 
   // Copy data to device
-  cudaMalloc(&d_A, size);
-  cudaMalloc(&d_B, size);
-  cudaMalloc(&d_C, size);
-  cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
+  CUDACHECK(cudaMalloc(&d_A, size));
+  CUDACHECK(cudaMalloc(&d_B, size));
+  CUDACHECK(cudaMalloc(&d_C, size));
+  CUDACHECK(cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice));
+  CUDACHECK(cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice));
 
   dim3 dimGrid(ceil((float) cols / T), ceil((float) rows / T), 1);
   dim3 dimBlock(T, T, 1);
@@ -75,12 +84,12 @@ int main(int argc, char **argv) {
   // Leave only the kernel and synchronize inside the timing region!
   t = omp_get_wtime();
   matrix_sum<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, rows, cols);
-  cudaDeviceSynchronize();
+  CUDACHECK(cudaDeviceSynchronize());
   t = omp_get_wtime() - t;
 
   // Copy data back to host
-  cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
-  cudaDeviceSynchronize();
+  CUDACHECK(cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost));
+  CUDACHECK(cudaDeviceSynchronize());
 
   long long int sum = 0;
 
@@ -95,5 +104,7 @@ int main(int argc, char **argv) {
   fprintf(stderr, "%lf\n", t);
 
   free(A); free(B); free(C);
-  cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+  CUDACHECK(cudaFree(d_A));
+  CUDACHECK(cudaFree(d_B));
+  CUDACHECK(cudaFree(d_C));
 }

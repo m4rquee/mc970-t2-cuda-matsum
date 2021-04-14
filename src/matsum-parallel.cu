@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#define T 32
-#define T_exp 5 // T = 1 << T_exp
+#define T 1024
+#define T_exp 10 // T = 1 << T_exp
 
 #define CUDACHECK(cmd) { \
   cudaError_t e = cmd; \
@@ -15,22 +15,19 @@
   } \
 }
 
-__global__ void matrix_sum(int *A, int *B, int *C, int N, int M) {
-  int row = (blockIdx.y << T_exp) + threadIdx.y;
-  int col = (blockIdx.x << T_exp) + threadIdx.x;
+__global__ void matrix_sum(int *A, int *B, int *C, int size) {
+  int i = (blockIdx.x << T_exp) + threadIdx.x;
 
+  // Limits the domain by setting i = (i >= size ? i - 1024 : i):
   asm(
   "{"
     ".reg .pred %p;"
-    "setp.ge.s32 %p, %0, %2;" // set %p with row >= N 
-    "@%p mov.s32 %0, 0;" // conceptually: row = (row >= N) ? 0 : row
-    "setp.ge.s32 %p, %1, %3;" // set %p with col >= M
-    "@%p mov.s32 %1, 0;" // conceptually: col = (col >= M) ? 0 : col
+    "setp.ge.s32 %p, %0, %1;" // set %p with i >= size
+    "@%p sub.s32 %0, %0, 1024;" // conceptually: i = (i >= size ? i - 1024 : i)
   "}"
-  : "+r"(row), "+r"(col)
-  : "r"(N), "r"(M));
+  : "+r"(i)
+  : "r"(size));
 
-  int i = row * M + col;
   C[i] = A[i] + B[i];
 }
 
@@ -77,13 +74,13 @@ int main(int argc, char **argv) {
   CUDACHECK(cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice));
   CUDACHECK(cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice));
 
-  dim3 dimGrid(ceil((float) cols / T), ceil((float) rows / T), 1);
-  dim3 dimBlock(T, T, 1);
+  dim3 dimGrid(ceil((float) cols * rows / T));
+  dim3 dimBlock(T);
 
   // Compute matrix sum on device
   // Leave only the kernel and synchronize inside the timing region!
   t = omp_get_wtime();
-  matrix_sum<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, rows, cols);
+  matrix_sum<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, cols * rows);
   CUDACHECK(cudaDeviceSynchronize());
   t = omp_get_wtime() - t;
 
